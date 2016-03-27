@@ -6,8 +6,18 @@
   </title>
   <link rel="stylesheet" href="https://s3-us-west-2.amazonaws.com/s.cdpn.io/104946/animate.min.css"></link>
   <link href='https://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
-  <script type="text/javascript" src="http://postbox.jsps.io/jsps-client/build/jsps.js"></script>
+  <script type="text/javascript" src="../../freesub-client/build/jsps.js"></script>
   <style type="text/css">
+  .nav2 {
+    position: relative !important;
+  }
+  .left {
+    width: 200px;
+    position: absolute;
+    left: -210px;
+    height: 100%;
+    background: #f2f2f2;
+  }
   #name {
     width: 40px;
     color: #fff;
@@ -28,12 +38,13 @@
     background-size: cover;
   }
 
-  #nameInput {
+  #nameTitle {
     background: transparent;
     border: none;
     color:#fff;
     font-family: 'Open Sans', sans-serif;
-    font-size: 12pt;
+    font-size: 14pt;
+    margin: 0;
   }
   .input {
     font-size: 12pt !important;
@@ -47,11 +58,11 @@
   .wrapper {
     height: 520px;
     width: 520px;
-    overflow: hidden;
     background-color: white;
     position: fixed;
     top: 100px;
     left: 50%;
+    margin-left: 100px;
     transform: translateX(-50%);
     box-shadow: 0px 3px 3px 0px rgba(50, 50, 50, 0.5);
     transition: 0.3s ease;
@@ -287,31 +298,48 @@
 </head>
 <body>
   <div class="wrapper">
-    <nav id="nav" class="nav">
-      <div class="default-nav">
-        <div class="main-nav">
-          <div class="toggle"></div>
-          <div class="main-nav-item">
-            <input type="text" id="nameInput" value="Matt" />
+    <div class="left">
+      <nav id="nav" class="nav nav2">
+        <div class="default-nav">
+          <div class="main-nav">
+            <div class="main-nav-item">
+              &nbsp;&nbsp;Connected Clients
+            </div>
           </div>
-          <div class="options"></div>
         </div>
-      </div>
-    </nav>
-    <div id="inner" class="inner">
-      <div id="content" class="content"></div>
+      </nav>
+      <ul id="clientList">
+
+      </ul>
     </div>
-    <div id="bottom" class="bottom">
-      <textarea id="input" class="input" placeholder="enter a message"></textarea>
-      <div id="send" class="send"></div>
+    <div class="right">
+      <nav id="nav" class="nav">
+        <div class="default-nav">
+          <div class="main-nav">
+            <div class="toggle"></div>
+            <div class="main-nav-item">
+              <span id="nameTitle"></span>
+            </div>
+            <div class="options"></div>
+          </div>
+        </div>
+      </nav>
+      <div id="inner" class="inner">
+        <div id="content" class="content"></div>
+      </div>
+      <div id="bottom" class="bottom">
+        <textarea id="input" class="input" placeholder="enter a message"></textarea>
+        <div id="send" class="send"></div>
+      </div>
     </div>
   </div>
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
   <script type="text/javascript">
   'use strict';
-
-  var Postbox = new jsps('ws://198.11.254.137:3000/', {
-    commonName: 'demoSite'
+  var person = prompt("What should we call you?", "Frankie");
+  document.getElementById('nameTitle').innerHTML = person;
+  var Postbox = new jsps('ws://localhost:3000/', {
+    commonName: person
   });
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
@@ -495,21 +523,38 @@ $(document).ready(function () {
   messenger.onSend = buildSent;
   messenger.onRecieve = buildRecieved;
 
-
-  Postbox.subscribe('General', msg => {
-    console.log(msg);
-  });
-
   document.getElementById('send').onclick = function(e){
     Postbox.publish('General', {
       message: document.getElementById('input').value,
-      from: document.getElementById('nameInput').value
+      from: document.getElementById('nameTitle').innerHTML
     });
   };
 
+  var pollClients = function() {
+    Postbox.clients('General');
+  };
+
+  var updateClients = function(clients) {
+    var clientList = document.getElementById('clientList');
+    clientList.innerHTML = '';
+    clients.map(function(client) {
+      clientList.innerHTML += '<li>' + client.commonName + '</li>';
+    });
+  };
+
+  setTimeout(function() {
+    Postbox.clients('General');
+  }, 500);
+
+  setInterval(pollClients, 5000);
+
   Postbox.subscribe('General', msg => {
-    messenger.recieve(msg.message.message, msg.message.from);
-    console.log(msg);
+    if (msg.metadata.type === 'publish') {
+      messenger.recieve(msg.message.message, msg.message.from);
+    } else if (msg.metadata.type === 'clients') {
+      updateClients(msg.clients);
+      console.log(msg);
+    }
   });
 
   $input.focus();
@@ -525,7 +570,7 @@ $(document).ready(function () {
 
       Postbox.publish('General', {
         message: document.getElementById('input').value,
-        from: document.getElementById('nameInput').value
+        from: document.getElementById('nameTitle').innerHTML
       });
       document.getElementById('input').value = '';
     }
