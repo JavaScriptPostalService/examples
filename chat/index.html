@@ -2,11 +2,11 @@
 <html>
 <head>
   <title>
-    jsps - Chat Example
+    jsps - Chat Yeps12356
   </title>
   <link rel="stylesheet" href="https://s3-us-west-2.amazonaws.com/s.cdpn.io/104946/animate.min.css"></link>
   <link href='https://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
-  <script type="text/javascript" src="../../freesub-client/build/jsps.js"></script>
+  <script type="text/javascript" src="../../catsnake-client/build/catsnake.js"></script>
   <style type="text/css">
   .nav2 {
     position: relative !important;
@@ -338,7 +338,7 @@
   'use strict';
   var person = prompt("What should we call you?", "Frankie");
   document.getElementById('nameTitle').innerHTML = person;
-  var Postbox = new jsps('ws://localhost:3000/', {
+  var Postbox = new CatSnake('ws://69.251.60.103:3081/', {
     commonName: person
   });
 
@@ -425,7 +425,7 @@ var Messenger = function () {
   }, {
     key: 'validate',
     value: function validate(input) {
-      return !!input.length; // an amazing example of validation I swear.
+      return !!input.length; // an amazing Yeps12356 of validation I swear.
     }
   }]);
 
@@ -524,14 +524,14 @@ $(document).ready(function () {
   messenger.onRecieve = buildRecieved;
 
   document.getElementById('send').onclick = function(e){
-    Postbox.publish('General', {
+    Postbox.publish('Yeps12356', {
       message: document.getElementById('input').value,
       from: document.getElementById('nameTitle').innerHTML
     });
   };
 
   var pollClients = function() {
-    Postbox.clients('General');
+    Postbox.info('Yeps12356');
   };
 
   var updateClients = function(clients) {
@@ -543,19 +543,26 @@ $(document).ready(function () {
   };
 
   setTimeout(function() {
-    Postbox.clients('General');
+    Postbox.info('Yeps12356');
   }, 500);
 
   setInterval(pollClients, 5000);
 
-  Postbox.subscribe('General', msg => {
+  Postbox.subscribe('Yeps12356', msg => {
     if (msg.metadata.type === 'publish') {
       messenger.recieve(msg.message.message, msg.message.from);
     } else if (msg.metadata.type === 'clients') {
       updateClients(msg.clients);
       console.log(msg);
+    } if (msg.metadata.type === 'history') {
+      msg.history.map(function(message) {
+        messenger.recieve(message.payload.message, message.payload.from);
+      });
     }
   });
+
+  Postbox.history('Yeps12356', 10);
+
 
   $input.focus();
 
@@ -568,7 +575,7 @@ $(document).ready(function () {
       // enter key
       e.preventDefault();
 
-      Postbox.publish('General', {
+      Postbox.publish('Yeps12356', {
         message: document.getElementById('input').value,
         from: document.getElementById('nameTitle').innerHTML
       });
