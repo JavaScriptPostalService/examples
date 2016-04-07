@@ -1,6 +1,6 @@
 var myName = 'Pianist' + Math.floor(Math.random() * 1345).toString();
 
-var Postbox = new CatSnake('ws://104.236.219.214:3081/', {
+var Postbox = new CatSnake('ws://localhost:3081/', {
   commonName: myName
 });
 
@@ -93,7 +93,7 @@ for ( var keyCode in keyCodeNotes ) {
 
 Postbox.subscribe('Piano', msg => {
   if (msg.metadata.type === 'publish') {
-    console.log(msg);
+
     if (msg.message.play) {
       var tone = tones[ msg.message.play ];
       if ( tone ) {
