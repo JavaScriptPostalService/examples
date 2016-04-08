@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Catsnake Tester</title>
+    <script src="https://cdn.jsdelivr.net/lodash/4.8.2/lodash.min.js"></script>
+
+    <script type="text/javascript" src="./catsnake.js"></script>
+    <link href="./assets/css/toolkit-inverse.css" rel="stylesheet">
+    <link href="./assets/css/application.css" rel="stylesheet">
+  </head>
+  <body>
+    <div class="container">
+      <div class="row">
+        <div class="col-sm-3 sidebar">
+          <nav class="sidebar-nav">
+            <div class="sidebar-header">
+              <button class="nav-toggler nav-toggler-sm sidebar-toggler" type="button" data-toggle="collapse" data-target="#nav-toggleable-sm">
+                <span class="sr-only">Toggle nav</span>
+              </button>
+              <a class="sidebar-brand img-responsive" href="../index.html">
+                <span class="icon icon-leaf sidebar-brand-icon"></span>
+              </a>
+            </div>
+
+            <div class="collapse nav-toggleable-sm" id="nav-toggleable-sm">
+
+              <ul class="nav nav-pills nav-stacked">
+                <li class="nav-header">Packet Size</li>
+                <li >
+                  <select id="packet" class="form-control">
+                    <option value="2">small</option>
+                    <option value="1">medium</option>
+                    <option value="0">large</option>
+                  </select>
+                </li>
+
+                <li class="nav-header">Interval (ms)</li>
+                <li >
+                  <input id="interval" class="form-control" type="text" placeholder="0ms" value="100"/>
+                </li>
+                <li class="nav-header">Ready?</li>
+                <li>
+                  <button id="start" class="btn btn-success-outline btn-block">Start</button>
+                  <button id="stop" class="btn btn-danger-outline btn-block">Stop</button>
+
+                </li>
+              </ul>
+              <hr class="visible-xs m-t">
+            </div>
+          </nav>
+        </div>
+        <div class="col-sm-9 content">
+          <div class="dashhead">
+    <div class="dashhead-titles">
+      <h6 class="dashhead-subtitle">CatsnakeJS</h6>
+      <h2 class="dashhead-title">Performance Tester</h2>
+    </div>
+
+    </div>
+
+    <hr class="m-t">
+
+    <label>Packets Sent</label>
+    <p id="total">0</p>
+    <label>Average Latency</label>
+    <p id="latencyResult">0</p>
+
+    <script type="text/javascript" src="./tester.js"></script>
+
+  </body>
+</html>
