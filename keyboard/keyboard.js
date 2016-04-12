@@ -1,7 +1,8 @@
 var myName = 'Pianist' + Math.floor(Math.random() * 1345).toString();
 
 var Postbox = new CatSnake('ws://localhost:3081/', {
-  commonName: myName
+  commonName: myName,
+  bypassThrottle: true
 });
 
 var AudioCtx = window.AudioContext || window.webkitAudioContext;

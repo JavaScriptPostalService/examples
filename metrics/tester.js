@@ -1,6 +1,6 @@
 var myName = 'Tester' + Math.floor(Math.random() * 1345).toString();
 
-var Postbox = new CatSnake('ws://198.11.254.137:3081/', {
+var Postbox = new CatSnake('ws://localhost:3081/', {
   commonName: myName
 });
 
@@ -430,30 +430,41 @@ Postbox.subscribe('Testing', msg => {
     recieved[msg.message.packetCount] = {
       latency: Date.now() - msg.message.startTime
     }
+
+    document.getElementById('packets').innerHTML += '<br /><label class="label label-success"><i class="fa fa-arrow-down"></i> ' + JSON.stringify(msg) + '</label>';
+    document.getElementById('packets').scrollTop = document.getElementById('packets').scrollHeight;
   }
 });
 
+var packetCount = 0;
+var testInterval;
+
 setInterval(function() {
-  document.getElementById('latencyResult').innerHTML = _.meanBy(recieved, function(o) {
+  document.getElementById('latencyResult').innerHTML = Math.floor(_.meanBy(recieved, function(o) {
     if (o) {
       if(o.latency !== null) {
         return o.latency;
       }
     }
-  }) + 'ms';
+  })) + 'ms';
+
+  document.getElementById('packetCount').innerHTML = packetCount;
 }, 2000);
 
-var packetCount = 0;
-var testInterval;
+
 var start = function(interval, packet) {
   testInterval = setInterval(function() {
-    recieved[packetCount + 1] = null;
-
-    Postbox.publish('Testing', {
+    var pay = {
       startTime: Date.now(),
       packetCount: packetCount + 1,
       payload: packets[packet]
+    };
+    Postbox.publish('Testing', pay).then(() => {
+      console.log('server got message');
     });
+    document.getElementById('packets').innerHTML += '<br /><label class="label label-default"><i class="fa fa-arrow-up"></i> ' + JSON.stringify(pay) + '</label>';
+    document.getElementById('packets').scrollTop = document.getElementById('packets').scrollHeight;
+
     packetCount += 1;
 
   }, interval);

@@ -38,23 +38,12 @@ var __commonjs_global = typeof window !== 'undefined' ? window : typeof global !
 function __commonjs(fn, module) { return module = { exports: {} }, fn(module, module.exports, __commonjs_global), module.exports; }
 
 /**
- * csModClientid module.
- * @module core/csModClientid
- * @return {string} - Returns a new random, unique clientid
+ * config module.
+ * @module core/config
  */
-
-// This function simply generates a random time based client token.
-// Clients will use this token to authenticate themselves, so this should be
-// saved in the application if you plan to resubscribe to channels after reloading
-// the catsnake client
-var csModClientid = function csModClientid() {
-  var d = new Date().getTime();
-  var uuid = 'client-xxxxxxxx'.replace(/[xy]/g, function (c) {
-    var r = (d + Math.random() * 16) % 16 | 0;
-    d = Math.floor(d / 16);
-    return (c === 'x' ? r : r & 0x3 | 0x8).toString(16);
-  });
-  return uuid;
+var catsnakeConfig = {
+  defaultName: 'A random catsnake',
+  requestsPerSecond: 15
 };
 
 var msgpack_min = __commonjs(function (module, exports, global) {
@@ -923,6 +912,64 @@ var msgpack_min = __commonjs(function (module, exports, global) {
 var msgpack = (msgpack_min && typeof msgpack_min === 'object' && 'default' in msgpack_min ? msgpack_min['default'] : msgpack_min);
 
 /**
+ * csModClientid module.
+ * @module core/csModClientid
+ * @return {string} - Returns a new random, unique clientid
+ */
+
+// This function simply generates a random time based client token.
+// Clients will use this token to authenticate themselves, so this should be
+// saved in the application if you plan to resubscribe to channels after reloading
+// the catsnake client
+var csModClientid = function csModClientid() {
+  var d = new Date().getTime();
+  var uuid = 'client-xxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = (d + Math.random() * 16) % 16 | 0;
+    d = Math.floor(d / 16);
+    return (c === 'x' ? r : r & 0x3 | 0x8).toString(16);
+  });
+  return uuid;
+};
+
+/**
+ * csModThrottle module.
+ * @module core/csModThrottle
+ * @param {object} data - the object to attempt to send
+ * @param {object} callback - returns data, if acceptable.
+*/
+
+var requests = [];
+var queue = [];
+
+// Only allow 100 messages per second.
+setInterval(function () {
+  requests.shift();
+}, 1000 / catsnakeConfig.requestsPerSecond);
+
+var csModThrottle = function csModThrottle(data, callback, _this) {
+  if (_this.bypassThrottle) {
+    // This client has chosen to bypass throttling, dispatch message
+    callback(data);
+  } else {
+    if (requests.length < catsnakeConfig.requestsPerSecond) {
+      if (queue.length) {
+        // Take care of any queued requests before sending out new ones.
+        callback(queue[0]);
+        queue.shift();
+      } else {
+        // All is good, dispatch the message.
+        callback(data);
+      }
+      requests.push(Date.now());
+    } else {
+      // The requests are coming in too fast, let's queue this one for later.
+      queue.push(data);
+      console.warn('You are trying to send over ' + catsnakeConfig.requestsPerSecond + ' messages per second, check that your application is working correctly.');
+    }
+  }
+};
+
+/**
  * csModStringify module.
  * @module core/csModStringify
  * @param {object} data - the object to attempt to stringify
@@ -931,12 +978,27 @@ var msgpack = (msgpack_min && typeof msgpack_min === 'object' && 'default' in ms
 
 // A dead simple try catch for stringifying objects. In the future we'd like this
 // to somehow minify the string and make for a smaller payload
-var csModStringify = function csModStringify(data, callback) {
-  try {
-    callback(msgpack.encode(data));
-  } catch (e) {
-    console.warn('attempted to send invalid data to the pubsub server.');
-  }
+var csModStringify = function csModStringify(data, callback, _this) {
+  // Client side packet throttling, enforces serverside as well.
+  csModThrottle(data, function (throttledData) {
+    callback(msgpack.encode(throttledData));
+  }, _this);
+};
+
+/**
+ * csModUUID module.
+ * @module core/csModUUID
+ * @return {string} - Returns a new random, unique uuid
+ */
+
+var csModUUID = function csModUUID() {
+  var d = new Date().getTime();
+  var uuid = 'xxxx-xxxx-xxxx-xxxx-xxxx'.replace(/[xy]/g, function (c) {
+    var r = (d + Math.random() * 16) % 16 | 0;
+    d = Math.floor(d / 16);
+    return (c === 'x' ? r : r & 0x3 | 0x8).toString(16);
+  });
+  return uuid;
 };
 
 /**
@@ -946,33 +1008,47 @@ var csModStringify = function csModStringify(data, callback) {
  * @param {object} data - the object to publish
  * @param {string} privateKey - optional private key for private channels
  * @param {this} _this - this inheratance
+ * @returns {promise} - returns new promise, resolved when server gets message
 */
 var csModPublish = function csModPublish(channel, data, privateKey, _this) {
-  // If we're connected, let's go ahead and publish our payload.
-  if (_this.connected) {
-    // Safely stringify our data before sending it to the server.
-    _this.stringify({
-      channel: channel,
-      privateKey: privateKey,
-      payload: data,
-      metadata: {
-        time: Date.now(),
-        client: _this.client,
-        commonName: _this.commonName,
-        type: 'publish'
-      }
-    }, function (payload) {
-      // Send off the payload to the server signifiying we're using a standard publish method.
-      _this.socket.send(payload);
-    });
-  } else {
-    // Crap, Something is wrong and we're not connected yet, let's try again later.
-    console.warn('Failed to connect, attempting again in 1 second.');
-    setTimeout(function () {
-      // call self with the same params that were initially passed.
-      _this.publish(channel, data, privateKey);
-    }, 500);
-  }
+  return new Promise(function (resolve) {
+    var uuid = csModUUID();
+    // If we're connected, let's go ahead and publish our payload.
+    if (_this.connected) {
+      // Safely stringify our data before sending it to the server.
+      _this.stringify({
+        channel: channel,
+        privateKey: privateKey,
+        payload: data,
+        metadata: {
+          time: Date.now(),
+          client: _this.client,
+          commonName: _this.commonName,
+          id: uuid,
+          type: 'publish'
+        }
+      }, function (payload) {
+        // Send off the payload to the server signifiying we're using a standard publish method.
+        _this.socket.send(payload);
+
+        // Wait for success message to come back from server
+        _this.awaitMessage(function (msg) {
+          if (msg.helper) {
+            if (msg.metadata.id === uuid) {
+              resolve(msg);
+            }
+          }
+        });
+      });
+    } else {
+      // Crap, Something is wrong and we're not connected yet, let's try again later.
+      console.warn('Failed to connect, attempting again in 1 second.');
+      setTimeout(function () {
+        // call self with the same params that were initially passed.
+        _this.publish(channel, data, privateKey);
+      }, 500);
+    }
+  });
 };
 
 /**
@@ -987,7 +1063,7 @@ var csModInfo = function csModInfo(channel, data, opts, _this) {
   // Since options are optional, if there are no options passed, we'll drop in
   // an empty object if options are false or undefined. This will help fix top
   // level null or undefined exceptions.
-  var options = opts ? opts : {};
+  var options = opts || {};
   var privateKey = options.privateKey ? options.privateKey : false;
 
   // If we're connected, let's go ahead and publish our payload.
@@ -1029,9 +1105,9 @@ var csModSubscribe = function csModSubscribe(channel, callback, opts, _this) {
   // Since options are optional, if there are no options passed, we'll drop in
   // an empty object if options are false or undefined. This will help fix top
   // level null or undefined exceptions.
-  var options = opts ? opts : {};
+  var options = opts || {};
 
-  var privateKey = options.privateKey ? options.privateKey : false;
+  var privateKey = options.privateKey || false;
 
   if (_this.connected) {
     // Safely stringify our data before sending it to the server.
@@ -1048,17 +1124,15 @@ var csModSubscribe = function csModSubscribe(channel, callback, opts, _this) {
         type: 'subscribe'
       }
     }, function (payload) {
-      console.log('payload', payload);
       // Send off the payload to the server letting it know we're subscribing to a channel
       _this.socket.send(payload);
 
       // Whenever the server has new info it will tell us here.
-      _this.socket.onmessage = function (msg) {
-        var decodedMsg = msgpack.decode(new Uint8Array(msg.data));
-        if (decodedMsg.channel === channel) {
-          callback(decodedMsg);
+      _this.awaitMessage(function (msg) {
+        if (msg.channel === channel) {
+          callback(msg);
         }
-      };
+      });
 
       // When we go to leave be sure to tell the server we're leaving, it would be rude not to.
       window.onbeforeunload = function () {
@@ -1071,8 +1145,8 @@ var csModSubscribe = function csModSubscribe(channel, callback, opts, _this) {
             commonName: _this.commonName,
             type: 'unsubscribe'
           }
-        }, function (payload) {
-          _this.socket.send(payload);
+        }, function (pl) {
+          _this.socket.send(pl);
         });
       };
     });
@@ -1082,6 +1156,42 @@ var csModSubscribe = function csModSubscribe(channel, callback, opts, _this) {
     setTimeout(function () {
       // call self with the same params that were initially passed.
       _this.subscribe(channel, callback, opts);
+    }, 500);
+  }
+};
+
+/**
+ * Grant a client access to a channel
+ * @function csModGrant
+ * @param {string} channel - the channel in which to grant the client access to
+ * @param {string} client - the client to grant access
+ * @param {string} secret - the secret key associated with this channel
+ * @param {this} _this - this inheratance
+*/
+var csModGrant = function csModGrant(channel, client, secret, _this) {
+  // If we're connected, let's go ahead and publish our payload.
+  if (_this.connected) {
+    // Safely stringify our data before sending it to the server.
+    _this.stringify({
+      channel: channel,
+      client: client,
+      secret: secret,
+      metadata: {
+        time: Date.now(),
+        client: _this.client,
+        commonName: _this.commonName,
+        type: 'grant'
+      }
+    }, function (payload) {
+      // Send off the payload to the frontend that will attempt to deny a client
+      _this.socket.send(payload);
+    });
+  } else {
+    // Something is wrong and we're not connected yet, let's try again later.
+    console.warn('Failed to connect, attempting again in 1 second.');
+    setTimeout(function () {
+      // call self with the same params that were initially passed.
+      _this.grant(channel, client, secret);
     }, 500);
   }
 };
@@ -1117,7 +1227,39 @@ var csModDeny = function csModDeny(channel, client, secret, _this) {
     console.warn('Failed to connect, attempting again in 1 second.');
     setTimeout(function () {
       // call self with the same params that were initially passed.
-      _this.info(channel, data, opts);
+      _this.deny(channel, client, secret);
+    }, 500);
+  }
+};
+
+/**
+ * Grant a client access to a private server
+ * @function csModAuthenticate
+ * @param {string} secret - the secret key for the private server
+ * @param {this} _this - this inheratance
+*/
+var csModAuthenticate = function csModAuthenticate(secret, _this) {
+  // If we're connected, let's go ahead and publish our payload.
+  if (_this.connected) {
+    // Safely stringify our data before sending it to the server.
+    _this.stringify({
+      metadata: {
+        time: Date.now(),
+        client: _this.client,
+        commonName: _this.commonName,
+        type: 'authenticate',
+        secret: secret
+      }
+    }, function (payload) {
+      // Send off the payload to the frontend that will attempt to deny a client
+      _this.socket.send(payload);
+    });
+  } else {
+    // Something is wrong and we're not connected yet, let's try again later.
+    console.warn('Failed to connect, attempting again in 1 second.');
+    setTimeout(function () {
+      // call self with the same params that were initially passed.
+      _this.authenticate(secret);
     }, 500);
   }
 };
@@ -1134,8 +1276,8 @@ var csModHistory = function csModHistory(channel, limit, opts, _this) {
   // Since options are optional, if there are no options passed, we'll drop in
   // an empty object if options are false or undefined. This will help fix top
   // level null or undefined exceptions.
-  var options = opts ? opts : {};
-  var privateKey = options.privateKey ? options.privateKey : false;
+  var options = opts || {};
+  var privateKey = options.privateKey || false;
 
   // If we're connected, let's go ahead and publish our payload.
   if (_this.connected) {
@@ -1174,6 +1316,9 @@ var CatSnake = function () {
    * @constructs CatSnake
    * @param {string} address - the address of the catsnake server
    * @param {object} options - options such as common name and others
+   * @param {string} options.commonName - common name of your client
+   * @param {boolean} options.bypassThrottle - bypass client side throttling, this does not prevent serverside throttling
+   * @param {string} options.clientId - reconnect with an old clientId
    */
 
   function CatSnake(address, options) {
@@ -1187,9 +1332,11 @@ var CatSnake = function () {
     this.connected = false;
 
     // Genrate a unique clientid
-    this.client = csModClientid();
+    this.client = options.clientId ? options.clientId : csModClientid();
 
     this.commonName = options.commonName ? options.commonName : config.defaultName;
+
+    this.bypassThrottle = options.bypassThrottle ? options.bypassThrottle : false;
 
     // Fired when the connection is made to the server
     this.socket.onopen = function (event) {
@@ -1200,95 +1347,157 @@ var CatSnake = function () {
         _this.socket.close();
       };
     };
+
+    this.listeners = [];
+
+    this.socket.onmessage = function (msg) {
+      var decodedMsg = msgpack.decode(new Uint8Array(msg.data));
+
+      _this.listeners.map(function (l) {
+        l(decodedMsg);
+      });
+    };
   }
 
   babelHelpers.createClass(CatSnake, [{
+    key: 'awaitMessage',
+    value: function awaitMessage(listener) {
+      this.listeners.push(listener);
+    }
+  }, {
     key: 'stringify',
     value: function stringify(data, callback) {
       /**
        * Tries to return a stringified object.
-       * @function csModStringify
+       * @function stringify (internal)
        * @param {object} data - the object to attempt to stringify
        * @callback {string} - Returns a stringified object
       */
-      return csModStringify(data, callback);
+      return csModStringify(data, callback, this);
     }
+
+    /**
+     * Publishes a message to all subscribers
+     * @function publish
+     * @param {string} channel - the channel to publish to
+     * @param {object} data - the object to publish
+     * @param {string} privateKey - optional private key for private channels
+    */
+
   }, {
     key: 'publish',
     value: function publish(channel, data, privateKey) {
-      /**
-       * Publishes a message to all subscribers
-       * @function csModPublish
-       * @param {string} channel - the channel to publish to
-       * @param {object} data - the object to publish
-       * @param {string} privateKey - optional private key for private channels
-       * @param {this} this - this inheratance
-      */
-      csModPublish(channel, data, privateKey, this);
+      return csModPublish(channel, data, privateKey, this);
     }
+
+    /**
+     * List channels, get client info.
+     * @function info
+     * @param {string} channel - the channel to look at
+     * @param {object} data - additional information for request
+     * @param {object} opts - additional options for subscriptions
+     * @param {string} opts.privateKey - private key used for getting info from private channels
+    */
+
   }, {
     key: 'info',
     value: function info(channel, data, opts) {
-      /**
-       * List all clients
-       * @function csModInfo
-       * @param {string} channel - the channel to look at
-       * @param {object} data - additional information for request
-       * @param {object} opts - additional options for subscriptions
-       * @param {this} this - this inheratance
-      */
       csModInfo(channel, data, opts, this);
     }
+
+    /**
+     * Get message history from a channel.
+     * @function history
+     * @param {string} channel - the channel to pull history from
+     * @param {number} limit - the ammount of items to pull from history
+     * @param {object} opts - options such as privateKeys
+     * @param {string} opts.privateKey - private key used for getting history from private channels
+    */
+
   }, {
     key: 'history',
     value: function history(channel, limit, opts) {
-      /**
-       * List all clients
-       * @function csModHistory
-       * @param {string} channel - the channel to pull history from
-       * @param {number} limit - the ammount of items to pull from history
-       * @param {object} opts - options such as privateKeys
-       * @param {this} this - this inheratance
-      */
       csModHistory(channel, limit, opts, this);
     }
+
+    /**
+     * Subscribe to a channel
+     * @function subscribe
+     * @param {string} channel - the channel to subscribe to
+     * @param {function} callback - new messages are returned here via msg
+     * @param {object} callback.msg - a new payload published to this channel
+     * @param {object} opts - additional options for subscriptions
+     * @param {string} opts.privateKey - private key used for subscribing to private channels
+     * @param {string} opts.noself - subscribe for everything but ignore your own payloads
+     * @param {string} opts.accessToken - used as a key to modify private channels. Not to be confused with privateKey
+     * @param {string} opts.private - make this channel private, clients can only connect if granted access
+    */
+
   }, {
     key: 'subscribe',
     value: function subscribe(channel, callback, opts) {
-      /**
-       * Subscribe to a channel
-       * @function csModSubscribe
-       * @param {string} channel - the channel to subscribe to
-       * @callback {function} callback - new messages are returned here via msg
-       * @param {object} opts - additional options for subscriptions
-       * @param {this} this - this inheratance
-      */
       csModSubscribe(channel, callback, opts, this);
     }
+
+    /**
+     * Deny a client access to a channel
+     * @function deny
+     * @param {string} channel - the channel in which to deny the client from
+     * @param {string} client - the client to deny
+     * @param {string} secret - the secret key associated with this channel
+    */
+
   }, {
     key: 'deny',
     value: function deny(channel, client, secret) {
-      /**
-       * Deny a client access to a channel
-       * @function csModDeny
-       * @param {string} channel - the channel in which to deny the client from
-       * @param {string} client - the client to deny
-       * @param {string} secret - the secret key associated with this channel
-      */
       return csModDeny(channel, client, secret, this);
     }
+
+    /**
+     * Grant a client access to a channel
+     * @function grant
+     * @param {string} channel - the channel in which to grant the client access to
+     * @param {string} client - the client to grant access
+     * @param {string} secret - the secret key associated with this channel
+    */
+
   }, {
     key: 'grant',
     value: function grant(channel, client, secret) {
-      /**
-       * Grant a client access to a channel
-       * @function csModGrant
-       * @param {string} channel - the channel in which to grant the client access to
-       * @param {string} client - the client to grant access
-       * @param {string} secret - the secret key associated with this channel
-      */
-      return cdModGrant(channel, client, secret, this);
+      return csModGrant(channel, client, secret, this);
+    }
+
+    /**
+     * Grant a client access to a private server
+     * @function csModAuthenticate
+     * @param {string} secret - the secret key for the private server
+    */
+
+  }, {
+    key: 'authenticate',
+    value: function authenticate(secret) {
+      return csModAuthenticate(secret, this);
     }
   }]);
   return CatSnake;
 }();
+/*
+        ___
+    . -^   `--,
+   /# =========`-_
+  /# (--====___====\
+ /#   .- --.  . --.|
+/##   |  * ) (   * ),
+|##   \    /\ \   / |
+|###   ---   \ ---  |
+|####      ___)    #|
+|######           ##|
+ \##### ---------- /   SHOW US WHAT YOU GOT!!!
+  \####           (  Submit a pull request and make Catsnake better.
+   `\###          |
+     \###         |
+      \##        |
+       \###.    .)
+        `======/
+
+*/

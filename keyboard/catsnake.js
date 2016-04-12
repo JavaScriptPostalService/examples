@@ -38,6 +38,15 @@ var __commonjs_global = typeof window !== 'undefined' ? window : typeof global !
 function __commonjs(fn, module) { return module = { exports: {} }, fn(module, module.exports, __commonjs_global), module.exports; }
 
 /**
+ * config module.
+ * @module core/config
+ */
+var catsnakeConfig = {
+  defaultName: 'A random catsnake',
+  requestsPerSecond: 15
+};
+
+/**
  * csModClientid module.
  * @module core/csModClientid
  * @return {string} - Returns a new random, unique clientid
@@ -923,6 +932,33 @@ var msgpack_min = __commonjs(function (module, exports, global) {
 var msgpack = (msgpack_min && typeof msgpack_min === 'object' && 'default' in msgpack_min ? msgpack_min['default'] : msgpack_min);
 
 /**
+ * csModThrottle module.
+ * @module core/csModThrottle
+ * @param {object} data - the object to attempt to send
+ * @param {object} callback - returns data, if acceptable.
+*/
+
+var requests = [];
+
+// Only allow 100 messages per second.
+setInterval(function () {
+  requests.shift();
+}, 1000 / catsnakeConfig.requestsPerSecond);
+
+var csModThrottle = function csModThrottle(data, callback, _this) {
+  if (_this.bypassThrottle) {
+    callback(data);
+  } else {
+    if (requests.length < catsnakeConfig.requestsPerSecond) {
+      requests.push(Date.now());
+      callback(data);
+    } else {
+      console.warn('You are trying to send over ' + catsnakeConfig.requestsPerSecond + ' messages per second, check that your application is working correctly.');
+    }
+  }
+};
+
+/**
  * csModStringify module.
  * @module core/csModStringify
  * @param {object} data - the object to attempt to stringify
@@ -931,12 +967,11 @@ var msgpack = (msgpack_min && typeof msgpack_min === 'object' && 'default' in ms
 
 // A dead simple try catch for stringifying objects. In the future we'd like this
 // to somehow minify the string and make for a smaller payload
-var csModStringify = function csModStringify(data, callback) {
-  try {
-    callback(msgpack.encode(data));
-  } catch (e) {
-    console.warn('attempted to send invalid data to the pubsub server.');
-  }
+var csModStringify = function csModStringify(data, callback, _this) {
+  // Client side packet throttling, enforces serverside as well.
+  csModThrottle(data, function (throttledData) {
+    callback(msgpack.encode(throttledData));
+  }, _this);
 };
 
 /**
@@ -1048,7 +1083,6 @@ var csModSubscribe = function csModSubscribe(channel, callback, opts, _this) {
         type: 'subscribe'
       }
     }, function (payload) {
-      console.log('payload', payload);
       // Send off the payload to the server letting it know we're subscribing to a channel
       _this.socket.send(payload);
 
@@ -1191,6 +1225,8 @@ var CatSnake = function () {
 
     this.commonName = options.commonName ? options.commonName : config.defaultName;
 
+    this.bypassThrottle = options.bypassThrottle ? options.bypassThrottle : false;
+
     // Fired when the connection is made to the server
     this.socket.onopen = function (event) {
       _this.connected = true;
@@ -1207,86 +1243,101 @@ var CatSnake = function () {
     value: function stringify(data, callback) {
       /**
        * Tries to return a stringified object.
-       * @function csModStringify
+       * @function stringify (internal)
        * @param {object} data - the object to attempt to stringify
        * @callback {string} - Returns a stringified object
       */
-      return csModStringify(data, callback);
+      return csModStringify(data, callback, this);
     }
+
+    /**
+     * Publishes a message to all subscribers
+     * @function publish
+     * @param {string} channel - the channel to publish to
+     * @param {object} data - the object to publish
+     * @param {string} privateKey - optional private key for private channels
+    */
+
   }, {
     key: 'publish',
     value: function publish(channel, data, privateKey) {
-      /**
-       * Publishes a message to all subscribers
-       * @function csModPublish
-       * @param {string} channel - the channel to publish to
-       * @param {object} data - the object to publish
-       * @param {string} privateKey - optional private key for private channels
-       * @param {this} this - this inheratance
-      */
       csModPublish(channel, data, privateKey, this);
     }
+
+    /**
+     * List channels, get client info.
+     * @function info
+     * @param {string} channel - the channel to look at
+     * @param {object} data - additional information for request
+     * @param {object} opts - additional options for subscriptions
+     * @param {string} opts.privateKey - private key used for getting info from private channels
+    */
+
   }, {
     key: 'info',
     value: function info(channel, data, opts) {
-      /**
-       * List all clients
-       * @function csModInfo
-       * @param {string} channel - the channel to look at
-       * @param {object} data - additional information for request
-       * @param {object} opts - additional options for subscriptions
-       * @param {this} this - this inheratance
-      */
       csModInfo(channel, data, opts, this);
     }
+
+    /**
+     * Get message history from a channel.
+     * @function history
+     * @param {string} channel - the channel to pull history from
+     * @param {number} limit - the ammount of items to pull from history
+     * @param {object} opts - options such as privateKeys
+     * @param {string} opts.privateKey - private key used for getting history from private channels
+    */
+
   }, {
     key: 'history',
     value: function history(channel, limit, opts) {
-      /**
-       * List all clients
-       * @function csModHistory
-       * @param {string} channel - the channel to pull history from
-       * @param {number} limit - the ammount of items to pull from history
-       * @param {object} opts - options such as privateKeys
-       * @param {this} this - this inheratance
-      */
       csModHistory(channel, limit, opts, this);
     }
+
+    /**
+     * Subscribe to a channel
+     * @function subscribe
+     * @param {string} channel - the channel to subscribe to
+     * @param {function} callback - new messages are returned here via msg
+     * @param {object} callback.msg - a new payload published to this channel
+     * @param {object} opts - additional options for subscriptions
+     * @param {string} opts.privateKey - private key used for subscribing to private channels
+     * @param {string} opts.noself - subscribe for everything but ignore your own payloads
+     * @param {string} opts.accessToken - used as a key to modify private channels. Not to be confused with privateKey
+     * @param {string} opts.private - make this channel private, clients can only connect if granted access
+    */
+
   }, {
     key: 'subscribe',
     value: function subscribe(channel, callback, opts) {
-      /**
-       * Subscribe to a channel
-       * @function csModSubscribe
-       * @param {string} channel - the channel to subscribe to
-       * @callback {function} callback - new messages are returned here via msg
-       * @param {object} opts - additional options for subscriptions
-       * @param {this} this - this inheratance
-      */
       csModSubscribe(channel, callback, opts, this);
     }
+
+    /**
+     * Deny a client access to a channel
+     * @function deny
+     * @param {string} channel - the channel in which to deny the client from
+     * @param {string} client - the client to deny
+     * @param {string} secret - the secret key associated with this channel
+    */
+
   }, {
     key: 'deny',
     value: function deny(channel, client, secret) {
-      /**
-       * Deny a client access to a channel
-       * @function csModDeny
-       * @param {string} channel - the channel in which to deny the client from
-       * @param {string} client - the client to deny
-       * @param {string} secret - the secret key associated with this channel
-      */
       return csModDeny(channel, client, secret, this);
     }
+
+    /**
+     * Grant a client access to a channel
+     * @function grant
+     * @param {string} channel - the channel in which to grant the client access to
+     * @param {string} client - the client to grant access
+     * @param {string} secret - the secret key associated with this channel
+    */
+
   }, {
     key: 'grant',
     value: function grant(channel, client, secret) {
-      /**
-       * Grant a client access to a channel
-       * @function csModGrant
-       * @param {string} channel - the channel in which to grant the client access to
-       * @param {string} client - the client to grant access
-       * @param {string} secret - the secret key associated with this channel
-      */
       return cdModGrant(channel, client, secret, this);
     }
   }]);

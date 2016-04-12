@@ -4,6 +4,8 @@
     <title>Catsnake Tester</title>
     <script src="https://cdn.jsdelivr.net/lodash/4.8.2/lodash.min.js"></script>
 
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+
     <script type="text/javascript" src="./catsnake.js"></script>
     <link href="./assets/css/toolkit-inverse.css" rel="stylesheet">
     <link href="./assets/css/application.css" rel="stylesheet">
@@ -36,7 +38,7 @@
 
                 <li class="nav-header">Interval (ms)</li>
                 <li >
-                  <input id="interval" class="form-control" type="text" placeholder="0ms" value="100"/>
+                  <input id="interval" class="form-control" type="text" placeholder="0ms" value="500"/>
                 </li>
                 <li class="nav-header">Ready?</li>
                 <li>
@@ -61,10 +63,13 @@
     <hr class="m-t">
 
     <label>Packets Sent</label>
-    <p id="total">0</p>
+    <p id="packetCount">0</p>
     <label>Average Latency</label>
     <p id="latencyResult">0</p>
+    <label>packets</label>
+    <div id="packets" style="height: 300px;width: 100%;overflow-y: scroll;overflow-x:hidden;">
 
+    </div>
     <script type="text/javascript" src="./tester.js"></script>
 
   </body>
